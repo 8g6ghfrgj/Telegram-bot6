@@ -27,28 +27,35 @@ class WhatsAppClientManager {
         this.clients = new Map(); // sessionId -> client
         this.clientData = new Map(); // sessionId -> metadata
         this.qrCodes = new Map(); // sessionId -> qr data
-        this.messageHandlers = new Map(); // sessionId -> handlers
-        this.autoCollectIntervals = new Map(); // sessionId -> interval
-        this.autoJoinIntervals = new Map(); // sessionId -> interval
         
         // إعدادات النظام
         this.settings = {
             maxClients: 10,
-            autoCollectInterval: 600000, // 10 دقائق
-            autoJoinInterval: 300000, // 5 دقائق
-            qrTimeout: 60000, // 60 ثانية
-            reconnectAttempts: 3,
-            cleanupInterval: 3600000 // ساعة واحدة
+            qrTimeout: 60000,
+            reconnectAttempts: 3
         };
         
-        // إعداد معالجات الأخطاء
-        this.setupErrorHandlers();
+        // معالجات الأحداث
+        this.setupEventHandlers();
         
         console.log('✅ مدير جلسات WhatsApp مهيأ وجاهز');
     }
     
     // ============================================
-    // 1. إنشاء جلسة واتساب جديدة
+    // 1. إعداد معالجات الأحداث
+    // ============================================
+    setupEventHandlers() {
+        process.on('unhandledRejection', (reason, promise) => {
+            console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+        });
+        
+        process.on('uncaughtException', (error) => {
+            console.error('❌ Uncaught Exception:', error);
+        });
+    }
+    
+    // ============================================
+    // 2. إنشاء جلسة واتساب جديدة
     // ============================================
     async createSession(sessionData) {
         const {
@@ -137,7 +144,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 2. إعداد عميل واتساب
+    // 3. إعداد عميل واتساب
     // ============================================
     setupWhatsAppClient(sessionId, phoneNumber, adminId, chatId) {
         console.log(`🔧 جاري إعداد عميل WhatsApp للجلسة: ${sessionId}`);
@@ -207,18 +214,13 @@ class WhatsAppClientManager {
             await this.handleLoadingScreen(percent, message, sessionId);
         });
         
-        // عند تغيير الاسم
-        client.on('change_battery', async (batteryInfo) => {
-            await this.handleBatteryChange(batteryInfo, sessionId);
-        });
-        
         console.log(`✅ تم إعداد عميل WhatsApp للجلسة: ${sessionId}`);
         
         return client;
     }
     
     // ============================================
-    // 3. معالجة QR Code
+    // 4. معالجة QR Code
     // ============================================
     async handleQRCode(qr, sessionId, phoneNumber, adminId, chatId) {
         console.log(`📱 تم توليد QR Code للجلسة: ${sessionId}`);
@@ -244,17 +246,12 @@ class WhatsAppClientManager {
                 { where: { id: sessionId } }
             );
             
-            // توليد QR Code نصي
-            const qrText = await this.generateQRText(qr);
-            
             console.log(`✅ تم حفظ QR Code للجلسة: ${sessionId}`);
             
-            // إرجاع بيانات QR
             return {
                 success: true,
                 sessionId: sessionId,
                 qr: qr,
-                qrText: qrText,
                 phoneNumber: phoneNumber,
                 timestamp: new Date()
             };
@@ -269,17 +266,8 @@ class WhatsAppClientManager {
         }
     }
     
-    async generateQRText(qr) {
-        return new Promise((resolve, reject) => {
-            qrcode.toString(qr, { type: 'terminal', small: true }, (err, text) => {
-                if (err) reject(err);
-                else resolve(text);
-            });
-        });
-    }
-    
     // ============================================
-    // 4. معالجة جاهزية العميل
+    // 5. معالجة جاهزية العميل
     // ============================================
     async handleClientReady(client, sessionId, phoneNumber, adminId, chatId) {
         console.log(`✅ WhatsApp جاهز للجلسة: ${sessionId} (${phoneNumber})`);
@@ -322,9 +310,6 @@ class WhatsAppClientManager {
                 clientData.reconnectAttempts = 0;
             }
             
-            // بدء مهام الخلفية
-            this.startBackgroundTasks(sessionId);
-            
             console.log(`✅ تم تحديث حالة الجلسة ${sessionId} إلى متصل`);
             
             return {
@@ -346,7 +331,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 5. معالجة رسائل واتساب
+    // 6. معالجة رسائل واتساب
     // ============================================
     async handleWhatsAppMessage(message, sessionId) {
         try {
@@ -364,11 +349,6 @@ class WhatsAppClientManager {
             
             // 3. اكتشاف روابط الانضمام
             await this.detectJoinLinks(message, sessionId);
-            
-            // 4. إرسال إشعار للمشرف (للمراسلات الخاصة فقط)
-            if (!message.from.includes('@g.us')) {
-                await this.notifyAdminOfPrivateMessage(message, sessionId);
-            }
             
             console.log(`📨 تم معالجة رسالة للجلسة ${sessionId} من ${message.from}`);
             
@@ -425,7 +405,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 6. تجميع الروابط من الرسائل
+    // 7. تجميع الروابط من الرسائل
     // ============================================
     async collectLinksFromMessage(message, sessionId) {
         try {
@@ -495,7 +475,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 7. نظام الردود التلقائية
+    // 8. نظام الردود التلقائية
     // ============================================
     async checkAutoReplies(message, sessionId) {
         try {
@@ -637,7 +617,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 8. اكتشاف روابط الانضمام
+    // 9. اكتشاف روابط الانضمام
     // ============================================
     async detectJoinLinks(message, sessionId) {
         try {
@@ -774,7 +754,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 9. معالجة تغيير الحالة
+    // 10. معالجة تغيير الحالة
     // ============================================
     async handleStateChange(state, sessionId) {
         console.log(`📡 تغيير حالة الجلسة ${sessionId}: ${state}`);
@@ -796,7 +776,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 10. معالجة فقدان الاتصال
+    // 11. معالجة فقدان الاتصال
     // ============================================
     async handleDisconnection(reason, sessionId) {
         console.log(`❌ فقدان الاتصال بالجلسة ${sessionId}: ${reason}`);
@@ -810,9 +790,6 @@ class WhatsAppClientManager {
                 },
                 { where: { id: sessionId } }
             );
-            
-            // إيقاف مهام الخلفية
-            this.stopBackgroundTasks(sessionId);
             
             // محاولة إعادة الاتصال
             await this.attemptReconnection(sessionId);
@@ -843,7 +820,7 @@ class WhatsAppClientManager {
                 } catch (error) {
                     console.error(`❌ فشل إعادة الاتصال للجلسة ${sessionId}:`, error);
                 }
-            }, 5000); // انتظر 5 ثواني قبل إعادة المحاولة
+            }, 5000);
             
         } else {
             console.log(`⏹️ توقفت محاولات إعادة الاتصال للجلسة ${sessionId}`);
@@ -851,7 +828,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 11. معالجة فشل المصادقة
+    // 12. معالجة فشل المصادقة
     // ============================================
     async handleAuthFailure(error, sessionId) {
         console.error(`❌ فشل المصادقة للجلسة ${sessionId}:`, error);
@@ -865,16 +842,13 @@ class WhatsAppClientManager {
                 { where: { id: sessionId } }
             );
             
-            // إيقاف مهام الخلفية
-            this.stopBackgroundTasks(sessionId);
-            
         } catch (error) {
             console.error(`❌ خطأ في معالجة فشل المصادقة للجلسة ${sessionId}:`, error);
         }
     }
     
     // ============================================
-    // 12. معالجة شاشة التحميل
+    // 13. معالجة شاشة التحميل
     // ============================================
     async handleLoadingScreen(percent, message, sessionId) {
         console.log(`⏳ تحميل الجلسة ${sessionId}: ${percent}% - ${message}`);
@@ -894,257 +868,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 13. معالجة تغيير البطارية
-    // ============================================
-    async handleBatteryChange(batteryInfo, sessionId) {
-        console.log(`🔋 تغيير حالة البطارية للجلسة ${sessionId}:`, batteryInfo);
-        
-        try {
-            const session = await WhatsAppSession.findByPk(sessionId);
-            if (session) {
-                const metadata = session.metadata || {};
-                metadata.batteryInfo = batteryInfo;
-                
-                await session.update({
-                    metadata: metadata,
-                    lastActivity: new Date()
-                });
-            }
-        } catch (error) {
-            console.error(`❌ خطأ في تحديث حالة البطارية للجلسة ${sessionId}:`, error);
-        }
-    }
-    
-    // ============================================
-    // 14. بدء مهام الخلفية
-    // ============================================
-    startBackgroundTasks(sessionId) {
-        console.log(`🚀 بدء مهام الخلفية للجلسة: ${sessionId}`);
-        
-        // بدء تجميع المجموعات والجهات
-        this.startAutoCollection(sessionId);
-        
-        // بدء الانضمام التلقائي إذا كان مفعلاً
-        this.startAutoJoin(sessionId);
-        
-        // بدء مراقبة النشاط
-        this.startActivityMonitoring(sessionId);
-    }
-    
-    async startAutoCollection(sessionId) {
-        try {
-            const session = await WhatsAppSession.findByPk(sessionId);
-            if (!session?.settings?.autoCollect) return;
-            
-            // إيقاف المهمة السابقة إذا كانت تعمل
-            this.stopAutoCollection(sessionId);
-            
-            // بدء المهمة الجديدة
-            const interval = setInterval(async () => {
-                await this.collectGroupsAndContacts(sessionId);
-            }, this.settings.autoCollectInterval);
-            
-            this.autoCollectIntervals.set(sessionId, interval);
-            
-            console.log(`📊 بدأ التجميع التلقائي للجلسة: ${sessionId}`);
-            
-            // تشغيل المهمة فوراً
-            await this.collectGroupsAndContacts(sessionId);
-            
-        } catch (error) {
-            console.error(`❌ خطأ في بدء التجميع التلقائي للجلسة ${sessionId}:`, error);
-        }
-    }
-    
-    async collectGroupsAndContacts(sessionId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) return;
-            
-            console.log(`📊 جاري تجميع بيانات الجلسة: ${sessionId}`);
-            
-            // الحصول على جميع المحادثات
-            const chats = await client.getChats();
-            
-            // تصنيف المحادثات
-            const groups = chats.filter(chat => chat.isGroup);
-            const contacts = chats.filter(chat => !chat.isGroup && chat.isUser);
-            
-            console.log(`📈 جمع ${groups.length} مجموعة و ${contacts.length} جهة اتصال للجلسة ${sessionId}`);
-            
-            // تحديث إحصائيات الجلسة
-            await WhatsAppSession.update(
-                {
-                    groupsCount: groups.length,
-                    contactsCount: contacts.length,
-                    lastActivity: new Date()
-                },
-                { where: { id: sessionId } }
-            );
-            
-            // تجميع روابط المجموعات
-            for (const group of groups.slice(0, 20)) { // تحد من عدد المجموعات
-                try {
-                    const inviteCode = await group.getInviteCode();
-                    if (inviteCode) {
-                        const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
-                        
-                        // التحقق من عدم تكرار الرابط
-                        const existingLink = await CollectedLink.findOne({
-                            where: { url: inviteLink }
-                        });
-                        
-                        if (!existingLink) {
-                            await CollectedLink.create({
-                                url: inviteLink,
-                                type: 'whatsapp_group',
-                                title: group.name || 'مجموعة واتساب',
-                                description: `مجموعة تحتوي على ${group.participants?.length || 0} عضو`,
-                                source: 'auto_collection',
-                                sessionId: sessionId,
-                                metadata: {
-                                    groupName: group.name,
-                                    groupSize: group.participants?.length || 0,
-                                    isActive: true,
-                                    lastChecked: new Date()
-                                },
-                                status: 'active',
-                                collectedAt: new Date()
-                            });
-                            
-                            console.log(`✅ رابط مجموعة محفوظ للجلسة ${sessionId}: ${group.name || 'مجموعة'}`);
-                        }
-                    }
-                    
-                    // تأخير بسيط بين المجموعات
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    
-                } catch (error) {
-                    console.log(`⚠️ لا يمكن الحصول على رابط المجموعة للجلسة ${sessionId}: ${group.name || 'غير معروفة'}`);
-                }
-            }
-            
-        } catch (error) {
-            console.error(`❌ خطأ في تجميع المجموعات والجهات للجلسة ${sessionId}:`, error);
-        }
-    }
-    
-    stopAutoCollection(sessionId) {
-        const interval = this.autoCollectIntervals.get(sessionId);
-        if (interval) {
-            clearInterval(interval);
-            this.autoCollectIntervals.delete(sessionId);
-            console.log(`⏹️ توقف التجميع التلقائي للجلسة: ${sessionId}`);
-        }
-    }
-    
-    async startAutoJoin(sessionId) {
-        try {
-            const session = await WhatsAppSession.findByPk(sessionId);
-            if (!session?.settings?.autoJoin) return;
-            
-            // التحقق من وجود إعدادات الانضمام التلقائي
-            const autoJoin = await AutoJoin.findOne({
-                where: {
-                    sessionId: sessionId,
-                    status: 'active'
-                }
-            });
-            
-            if (!autoJoin) return;
-            
-            // إيقاف المهمة السابقة إذا كانت تعمل
-            this.stopAutoJoin(sessionId);
-            
-            // بدء المهمة الجديدة
-            const interval = setInterval(async () => {
-                await this.processAutoJoin(sessionId);
-            }, this.settings.autoJoinInterval);
-            
-            this.autoJoinIntervals.set(sessionId, interval);
-            
-            console.log(`➕ بدأ الانضمام التلقائي للجلسة: ${sessionId}`);
-            
-            // تشغيل المهمة فوراً
-            await this.processAutoJoin(sessionId);
-            
-        } catch (error) {
-            console.error(`❌ خطأ في بدء الانضمام التلقائي للجلسة ${sessionId}:`, error);
-        }
-    }
-    
-    async processAutoJoin(sessionId) {
-        try {
-            const autoJoin = await AutoJoin.findOne({
-                where: {
-                    sessionId: sessionId,
-                    status: 'active'
-                }
-            });
-            
-            if (!autoJoin) return;
-            
-            // البحث عن روابط واتساب جديدة
-            const whatsappLinks = await CollectedLink.findAll({
-                where: {
-                    type: 'whatsapp_group',
-                    sessionId: sessionId,
-                    status: 'active',
-                    collectedAt: {
-                        [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) // آخر 24 ساعة
-                    }
-                },
-                order: [['collectedAt', 'DESC']],
-                limit: 5
-            });
-            
-            for (const link of whatsappLinks) {
-                try {
-                    await this.joinWhatsAppGroup(link.url, sessionId);
-                    
-                    // انتظر بين المحاولات
-                    await new Promise(resolve => setTimeout(resolve, 3000));
-                    
-                } catch (error) {
-                    console.error(`❌ خطأ في الانضمام التلقائي للجلسة ${sessionId}:`, error);
-                }
-            }
-            
-        } catch (error) {
-            console.error(`❌ خطأ في معالجة الانضمام التلقائي للجلسة ${sessionId}:`, error);
-        }
-    }
-    
-    stopAutoJoin(sessionId) {
-        const interval = this.autoJoinIntervals.get(sessionId);
-        if (interval) {
-            clearInterval(interval);
-            this.autoJoinIntervals.delete(sessionId);
-            console.log(`⏹️ توقف الانضمام التلقائي للجلسة: ${sessionId}`);
-        }
-    }
-    
-    startActivityMonitoring(sessionId) {
-        // مراقبة النشاط وتحديث آخر نشاط
-        // يمكن إضافة المزيد من المهام هنا
-    }
-    
-    stopBackgroundTasks(sessionId) {
-        this.stopAutoCollection(sessionId);
-        this.stopAutoJoin(sessionId);
-        console.log(`⏹️ توقفت جميع مهام الخلفية للجلسة: ${sessionId}`);
-    }
-    
-    // ============================================
-    // 15. إشعار المشرف بالرسائل الخاصة
-    // ============================================
-    async notifyAdminOfPrivateMessage(message, sessionId) {
-        // هذه الوظيفة يتم تنفيذها في telegramBot.js
-        // هنا نتركها كدالة مساعدة للاستخدام المستقبلي
-    }
-    
-    // ============================================
-    // 16. إدارة الجلسات
+    // 14. إدارة الجلسات
     // ============================================
     async getSession(sessionId) {
         return {
@@ -1212,13 +936,9 @@ class WhatsAppClientManager {
             };
         }
         
-        // توليد QR نصي
-        const qrText = await this.generateQRText(qrData.qr);
-        
         return {
             success: true,
             qr: qrData.qr,
-            qrText: qrText,
             phoneNumber: qrData.phoneNumber,
             timestamp: qrData.timestamp,
             age: qrAge,
@@ -1226,39 +946,8 @@ class WhatsAppClientManager {
         };
     }
     
-    async regenerateQR(sessionId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير موجودة'
-                };
-            }
-            
-            // إعادة تهيئة العميل لتوليد QR جديد
-            await client.destroy();
-            await client.initialize();
-            
-            console.log(`🔄 تم طلب إعادة توليد QR للجلسة: ${sessionId}`);
-            
-            return {
-                success: true,
-                message: 'جاري توليد QR Code جديد...'
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في إعادة توليد QR للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
     // ============================================
-    // 17. إرسال رسائل
+    // 15. إرسال رسائل
     // ============================================
     async sendMessage(sessionId, to, message, options = {}) {
         try {
@@ -1302,45 +991,8 @@ class WhatsAppClientManager {
         }
     }
     
-    async sendMedia(sessionId, to, mediaPath, caption = '') {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // تحميل الوسائط
-            const media = MessageMedia.fromFilePath(mediaPath);
-            
-            // إرسال الوسائط
-            const result = await client.sendMessage(to, media, { caption });
-            
-            // تحديث إحصائيات الجلسة
-            await this.updateSessionStats(sessionId, 'messagesSent');
-            
-            console.log(`✅ تم إرسال وسائط من الجلسة ${sessionId} إلى ${to}`);
-            
-            return {
-                success: true,
-                messageId: result.id._serialized,
-                timestamp: result.timestamp
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في إرسال وسائط من الجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
     // ============================================
-    // 18. الحصول على معلومات
+    // 16. الحصول على معلومات
     // ============================================
     async getChats(sessionId, options = {}) {
         try {
@@ -1399,314 +1051,8 @@ class WhatsAppClientManager {
         }
     }
     
-    async getContactInfo(sessionId, contactId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // الحصول على معلومات جهة الاتصال
-            const contact = await client.getContactById(contactId);
-            
-            return {
-                success: true,
-                contact: {
-                    id: contact.id._serialized,
-                    number: contact.number,
-                    name: contact.name,
-                    pushname: contact.pushname,
-                    isBusiness: contact.isBusiness,
-                    isEnterprise: contact.isEnterprise,
-                    isMe: contact.isMe,
-                    isUser: contact.isUser,
-                    isGroup: contact.isGroup,
-                    isWAContact: contact.isWAContact,
-                    isMyContact: contact.isMyContact
-                }
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في الحصول على معلومات جهة الاتصال للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
-    async getGroupInfo(sessionId, groupId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // الحصول على معلومات المجموعة
-            const chat = await client.getChatById(groupId);
-            
-            // الحصول على المشاركين
-            const participants = chat.participants || [];
-            
-            return {
-                success: true,
-                group: {
-                    id: chat.id._serialized,
-                    name: chat.name,
-                    description: chat.description,
-                    createdAt: chat.createdAt,
-                    creator: chat.creator,
-                    participantsCount: participants.length,
-                    isReadOnly: chat.isReadOnly,
-                    isAnnounceGrpRestrict: chat.isAnnounceGrpRestrict
-                },
-                participants: participants.map(p => ({
-                    id: p.id._serialized,
-                    isAdmin: p.isAdmin,
-                    isSuperAdmin: p.isSuperAdmin
-                }))
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في الحصول على معلومات المجموعة للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
-    async getGroupInviteLink(sessionId, groupId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // الحصول على رابط الدعوة
-            const chat = await client.getChatById(groupId);
-            const inviteCode = await chat.getInviteCode();
-            
-            const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
-            
-            return {
-                success: true,
-                groupId: groupId,
-                groupName: chat.name,
-                inviteCode: inviteCode,
-                inviteLink: inviteLink
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في الحصول على رابط الدعوة للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
     // ============================================
-    // 19. إدارة المجموعات
-    // ============================================
-    async createGroup(sessionId, name, participants) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // إنشاء مجموعة جديدة
-            const group = await client.createGroup(name, participants);
-            
-            return {
-                success: true,
-                groupId: group.gid._serialized,
-                groupName: group.name,
-                participants: group.participants.map(p => p.id._serialized)
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في إنشاء مجموعة للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
-    async leaveGroup(sessionId, groupId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // مغادرة المجموعة
-            const chat = await client.getChatById(groupId);
-            await chat.leave();
-            
-            return {
-                success: true,
-                groupId: groupId,
-                message: 'تم مغادرة المجموعة بنجاح'
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في مغادرة المجموعة للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
-    async addParticipant(sessionId, groupId, participantId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // إضافة مشارك إلى المجموعة
-            const chat = await client.getChatById(groupId);
-            await chat.addParticipants([participantId]);
-            
-            return {
-                success: true,
-                groupId: groupId,
-                participantId: participantId,
-                message: 'تم إضافة المشارك بنجاح'
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في إضافة مشارك للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
-    async removeParticipant(sessionId, groupId, participantId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // إزالة مشارك من المجموعة
-            const chat = await client.getChatById(groupId);
-            await chat.removeParticipants([participantId]);
-            
-            return {
-                success: true,
-                groupId: groupId,
-                participantId: participantId,
-                message: 'تم إزالة المشارك بنجاح'
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في إزالة مشارك للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
-    async promoteParticipant(sessionId, groupId, participantId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // ترقية مشارك إلى مشرف
-            const chat = await client.getChatById(groupId);
-            await chat.promoteParticipants([participantId]);
-            
-            return {
-                success: true,
-                groupId: groupId,
-                participantId: participantId,
-                message: 'تم ترقية المشارك إلى مشرف'
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في ترقية مشارك للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
-    async demoteParticipant(sessionId, groupId, participantId) {
-        try {
-            const client = this.clients.get(sessionId);
-            if (!client) {
-                return {
-                    success: false,
-                    error: 'الجلسة غير متصلة'
-                };
-            }
-            
-            // تخفيض مشرف إلى مشارك عادي
-            const chat = await client.getChatById(groupId);
-            await chat.demoteParticipants([participantId]);
-            
-            return {
-                success: true,
-                groupId: groupId,
-                participantId: participantId,
-                message: 'تم تخفيض المشرف إلى مشارك'
-            };
-            
-        } catch (error) {
-            console.error(`❌ خطأ في تخفيض مشرف للجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
-    // ============================================
-    // 20. إغلاق الجلسات
+    // 17. إغلاق الجلسات
     // ============================================
     async closeSession(sessionId) {
         console.log(`🛑 جاري إغلاق الجلسة: ${sessionId}`);
@@ -1722,9 +1068,6 @@ class WhatsAppClientManager {
                 this.clients.delete(sessionId);
                 this.clientData.delete(sessionId);
                 this.qrCodes.delete(sessionId);
-                
-                // إيقاف مهام الخلفية
-                this.stopBackgroundTasks(sessionId);
                 
                 // تحديث حالة الجلسة في قاعدة البيانات
                 await WhatsAppSession.update(
@@ -1783,45 +1126,8 @@ class WhatsAppClientManager {
         };
     }
     
-    async restartSession(sessionId) {
-        console.log(`🔄 جاري إعادة تشغيل الجلسة: ${sessionId}`);
-        
-        try {
-            const clientData = this.clientData.get(sessionId);
-            if (!clientData) {
-                return {
-                    success: false,
-                    error: 'بيانات الجلسة غير موجودة'
-                };
-            }
-            
-            // إغلاق الجلسة الحالية
-            await this.closeSession(sessionId);
-            
-            // إعادة إنشاء الجلسة
-            const result = await this.createSession({
-                sessionId: sessionId,
-                phoneNumber: clientData.phoneNumber,
-                adminId: clientData.adminId,
-                chatId: clientData.chatId
-            });
-            
-            console.log(`✅ تم إعادة تشغيل الجلسة: ${sessionId}`);
-            
-            return result;
-            
-        } catch (error) {
-            console.error(`❌ خطأ في إعادة تشغيل الجلسة ${sessionId}:`, error);
-            
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-    
     // ============================================
-    // 21. تنظيف الموارد
+    // 18. تنظيف الموارد
     // ============================================
     async cleanup() {
         console.log('🧹 جاري تنظيف موارد مدير الجلسات...');
@@ -1833,121 +1139,18 @@ class WhatsAppClientManager {
         this.clients.clear();
         this.clientData.clear();
         this.qrCodes.clear();
-        this.messageHandlers.clear();
-        this.autoCollectIntervals.clear();
-        this.autoJoinIntervals.clear();
         
         console.log('✅ تم تنظيف جميع موارد مدير الجلسات');
     }
     
     // ============================================
-    // 22. الصيانة الدورية
-    // ============================================
-    async maintenance() {
-        console.log('🔧 جاري صيانة مدير الجلسات...');
-        
-        try {
-            // 1. تنظيف الجلسات القديمة
-            await this.cleanupOldSessions();
-            
-            // 2. تحديث حالات الجلسات
-            await this.updateSessionStatuses();
-            
-            // 3. تنظيف الذاكرة المؤقتة
-            this.cleanupMemory();
-            
-            console.log('✅ تم إكمال صيانة مدير الجلسات');
-            
-        } catch (error) {
-            console.error('❌ خطأ في صيانة مدير الجلسات:', error);
-        }
-    }
-    
-    async cleanupOldSessions() {
-        try {
-            // البحث عن الجلسات المنتهية في قاعدة البيانات
-            const oldSessions = await WhatsAppSession.findAll({
-                where: {
-                    status: 'disconnected',
-                    disconnectedAt: {
-                        [Op.lt]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // أقدم من 7 أيام
-                    }
-                }
-            });
-            
-            for (const session of oldSessions) {
-                // حذف الجلسة من قاعدة البيانات
-                await session.destroy();
-                
-                // حذف الروابط المرتبطة
-                await CollectedLink.destroy({
-                    where: { sessionId: session.id }
-                });
-                
-                console.log(`🗑️ تم حذف الجلسة القديمة: ${session.id}`);
-            }
-            
-        } catch (error) {
-            console.error('❌ خطأ في تنظيف الجلسات القديمة:', error);
-        }
-    }
-    
-    async updateSessionStatuses() {
-        try {
-            // تحديث حالات الجلسات في قاعدة البيانات
-            for (const [sessionId, client] of this.clients.entries()) {
-                if (client) {
-                    await WhatsAppSession.update(
-                        {
-                            status: 'connected',
-                            lastActivity: new Date()
-                        },
-                        { where: { id: sessionId } }
-                    );
-                }
-            }
-            
-        } catch (error) {
-            console.error('❌ خطأ في تحديث حالات الجلسات:', error);
-        }
-    }
-    
-    cleanupMemory() {
-        const now = Date.now();
-        
-        // تنظيف QR Codes القديمة
-        for (const [sessionId, qrData] of this.qrCodes.entries()) {
-            const qrAge = now - qrData.timestamp;
-            if (qrAge > this.settings.qrTimeout) {
-                this.qrCodes.delete(sessionId);
-                console.log(`🧹 تم تنظيف QR Code منتهي للجلسة: ${sessionId}`);
-            }
-        }
-    }
-    
-    // ============================================
-    // 23. إعداد معالجات الأخطاء
-    // ============================================
-    setupErrorHandlers() {
-        process.on('unhandledRejection', (reason, promise) => {
-            console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-        });
-        
-        process.on('uncaughtException', (error) => {
-            console.error('❌ Uncaught Exception:', error);
-        });
-    }
-    
-    // ============================================
-    // 24. دوال المساعدة
+    // 19. دوال المساعدة
     // ============================================
     getStats() {
         return {
             totalClients: this.clients.size,
             activeClients: Array.from(this.clients.values()).filter(c => c).length,
             qrCodes: this.qrCodes.size,
-            autoCollectTasks: this.autoCollectIntervals.size,
-            autoJoinTasks: this.autoJoinIntervals.size,
             memoryUsage: process.memoryUsage(),
             uptime: process.uptime()
         };
@@ -1983,7 +1186,7 @@ class WhatsAppClientManager {
     }
     
     // ============================================
-    // 25. التصدير
+    // 20. التصدير
     // ============================================
     getClients() {
         return this.clients;
@@ -2008,6 +1211,6 @@ class WhatsAppClientManager {
 }
 
 // ============================================
-// 26. تصدير الفئة
+// 21. تصدير الفئة
 // ============================================
 module.exports = WhatsAppClientManager;
